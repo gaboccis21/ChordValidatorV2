@@ -31,7 +31,12 @@ const Hero = () => {
       <div className="relative z-10 text-center max-w-4xl mx-auto px-6 pt-20">
         {/* Logo */}
         <div className="mb-8 reveal">
-          <img alt="HarmoniQ" className="w-32 h-32 md:w-40 md:h-40 mx-auto drop-shadow-2xl" src="/lovable-uploads/9430d6e2-cd5c-49c9-bdda-be5b7576ecb8.png" />
+          <img
+            src={logo}
+            alt="HarmoniQ logo"
+            className="w-32 h-32 md:w-40 md:h-40 mx-auto drop-shadow-2xl"
+            decoding="async"
+          />
         </div>
         
         <h1 className="text-5xl md:text-7xl lg:text-8xl font-bold text-white text-architectural mb-4 reveal">
