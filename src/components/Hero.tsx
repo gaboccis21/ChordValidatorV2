@@ -50,7 +50,7 @@ const Hero = () => {
           <Button size="lg" className="bg-primary text-primary-foreground hover:bg-primary/90 text-lg px-8 py-6 shadow-lg shadow-primary/30">
             Try Validator Now
           </Button>
-          <Button size="lg" variant="outline" className="border-primary/50 text-white hover:bg-primary/10 text-lg px-8 py-6">
+          <Button size="lg" variant="outline" className="border-primary/50 text-foreground hover:bg-primary/10 text-lg px-8 py-6">
             Learn More
           </Button>
         </div>
