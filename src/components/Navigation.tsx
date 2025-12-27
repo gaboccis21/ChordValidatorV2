@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import logo from "@/assets/harmoniq-logo.png";
@@ -34,9 +35,11 @@ const Navigation = () => {
 
         <div className="hidden md:flex items-center space-x-4">
           <ThemeToggle />
-          <Button size="sm" className="bg-primary text-primary-foreground hover:bg-primary/90">
-            Try Validator
-          </Button>
+          <Link to="/validator">
+            <Button size="sm" className="bg-primary text-primary-foreground hover:bg-primary/90">
+              Try Validator
+            </Button>
+          </Link>
         </div>
 
         <Button
@@ -72,9 +75,11 @@ const Navigation = () => {
             {/* Mobile Actions */}
             <div className="pt-4 border-t border-border flex items-center gap-4">
               <ThemeToggle />
-              <Button size="sm" className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90">
-                Try Validator
-              </Button>
+              <Link to="/validator" className="flex-1">
+                <Button size="sm" className="w-full bg-primary text-primary-foreground hover:bg-primary/90">
+                  Try Validator
+                </Button>
+              </Link>
             </div>
           </div>
         </div>
