@@ -11,6 +11,7 @@ const Validator = () => {
   const [showLearnMore, setShowLearnMore] = useState(false);
   const [liveSuggestions, setLiveSuggestions] = useState<string[]>([]);
   const [hasValidated, setHasValidated] = useState(false);
+  const [selectedKey, setSelectedKey] = useState('C');
   const audioContextRef = useRef<AudioContext | null>(null);
 
   // NFA State definitions - Following Functional Harmony Rules
@@ -22,24 +23,73 @@ const Validator = () => {
     q_reject: { name: 'REJECT', color: 'bg-red-500', position: { x: 500, y: 180 } },
   };
 
-  // Chord to frequency mapping
+  // Chord to frequency mapping - expanded for all keys
   const chordFrequencies: Record<string, number[]> = {
-    'C': [261.63, 329.63, 392.00],
-    'Dm': [293.66, 349.23, 440.00],
-    'Em': [329.63, 392.00, 493.88],
-    'F': [349.23, 440.00, 523.25],
-    'G': [392.00, 493.88, 587.33],
-    'G7': [392.00, 493.88, 587.33, 698.46],
-    'Am': [440.00, 523.25, 659.25],
-    'Bdim': [493.88, 587.33, 698.46],
+    // C Major
+    'C': [261.63, 329.63, 392.00], 'Dm': [293.66, 349.23, 440.00], 'Em': [329.63, 392.00, 493.88],
+    'F': [349.23, 440.00, 523.25], 'G': [392.00, 493.88, 587.33], 'G7': [392.00, 493.88, 587.33, 698.46],
+    'Am': [440.00, 523.25, 659.25], 'Bdim': [493.88, 587.33, 698.46],
+    // G Major
+    'Bm': [493.88, 587.33, 739.99], 'D': [293.66, 369.99, 440.00], 'D7': [293.66, 369.99, 440.00, 523.25],
+    'F#dim': [369.99, 440.00, 523.25],
+    // D Major
+    'F#m': [369.99, 440.00, 554.37], 'A': [440.00, 554.37, 659.25], 'A7': [440.00, 554.37, 659.25, 783.99],
+    'C#dim': [277.18, 329.63, 392.00],
+    // A Major
+    'C#m': [277.18, 329.63, 415.30], 'E': [329.63, 415.30, 493.88], 'E7': [329.63, 415.30, 493.88, 587.33],
+    'G#dim': [415.30, 493.88, 587.33],
+    // E Major
+    'G#m': [415.30, 493.88, 622.25], 'B': [493.88, 622.25, 739.99], 'B7': [493.88, 622.25, 739.99, 880.00],
+    'D#dim': [311.13, 369.99, 440.00],
+    // F Major
+    'Gm': [392.00, 466.16, 587.33], 'Bb': [466.16, 587.33, 698.46], 'C7': [261.63, 329.63, 392.00, 466.16],
+    'Edim': [329.63, 392.00, 466.16],
+    // Bb Major
+    'Cm': [261.63, 311.13, 392.00], 'Eb': [311.13, 392.00, 466.16], 'F7': [349.23, 440.00, 523.25, 622.25],
+    'Adim': [440.00, 523.25, 622.25],
+    // Eb Major
+    'Fm': [349.23, 415.30, 523.25], 'Ab': [415.30, 523.25, 622.25], 'Bb7': [466.16, 587.33, 698.46, 830.61],
+    'Ddim': [293.66, 349.23, 415.30],
   };
 
-  // Map chord symbols to functional categories
-  const chordToFunction: Record<string, string> = {
-    'C': 'I', 'Am': 'vi', 'Em': 'iii',
-    'F': 'IV', 'Dm': 'ii',
-    'G': 'V', 'G7': 'V', 'Bdim': 'vii°',
+  // Available major keys
+  const majorKeys = [
+    { key: 'C', name: 'C Major' },
+    { key: 'G', name: 'G Major' },
+    { key: 'D', name: 'D Major' },
+    { key: 'A', name: 'A Major' },
+    { key: 'E', name: 'E Major' },
+    { key: 'F', name: 'F Major' },
+    { key: 'Bb', name: 'B♭ Major' },
+    { key: 'Eb', name: 'E♭ Major' },
+  ];
+
+  // Get scale degrees for any major key
+  const getScaleDegrees = (key: string): string[] => {
+    const scales: Record<string, string[]> = {
+      'C': ['C', 'Dm', 'Em', 'F', 'G', 'Am', 'Bdim'],
+      'G': ['G', 'Am', 'Bm', 'C', 'D', 'Em', 'F#dim'],
+      'D': ['D', 'Em', 'F#m', 'G', 'A', 'Bm', 'C#dim'],
+      'A': ['A', 'Bm', 'C#m', 'D', 'E', 'F#m', 'G#dim'],
+      'E': ['E', 'F#m', 'G#m', 'A', 'B', 'C#m', 'D#dim'],
+      'F': ['F', 'Gm', 'Am', 'Bb', 'C', 'Dm', 'Edim'],
+      'Bb': ['Bb', 'Cm', 'Dm', 'Eb', 'F', 'Gm', 'Adim'],
+      'Eb': ['Eb', 'Fm', 'Gm', 'Ab', 'Bb', 'Cm', 'Ddim'],
+    };
+    return scales[key] || scales['C'];
   };
+
+  // Get chord-to-function mapping for selected key
+  const getChordToFunction = (key: string): Record<string, string> => {
+    const degrees = getScaleDegrees(key);
+    return {
+      [degrees[0]]: 'I', [degrees[5]]: 'vi', [degrees[2]]: 'iii',
+      [degrees[3]]: 'IV', [degrees[1]]: 'ii',
+      [degrees[4]]: 'V', [`${degrees[4]}7`]: 'V', [degrees[6]]: 'vii°',
+    };
+  };
+
+  const chordToFunction = getChordToFunction(selectedKey);
 
   // NFA Transitions
   const transitions: Record<string, Record<string, string[]>> = {
@@ -56,12 +106,34 @@ const Validator = () => {
     },
   };
 
-  const examples = [
-    { name: 'Authentic Cadence', chords: 'C, G, C', desc: 'V → I (Perfect)' },
-    { name: 'Full Sequence', chords: 'C, F, G, C', desc: 'I → IV → V → I' },
-    { name: 'With Predominant', chords: 'C, Dm, G, C', desc: 'I → ii → V → I' },
-    { name: 'Tonic Prolongation', chords: 'C, C, G, C', desc: 'I → I → V → I' },
-  ];
+  // Dynamic examples based on selected key
+  const getExamples = () => {
+    const d = getScaleDegrees(selectedKey);
+    return [
+      { name: 'Authentic Cadence', chords: `${d[0]}, ${d[4]}, ${d[0]}`, desc: 'I → V → I' },
+      { name: 'Full Sequence', chords: `${d[0]}, ${d[3]}, ${d[4]}, ${d[0]}`, desc: 'I → IV → V → I' },
+      { name: 'With Predominant', chords: `${d[0]}, ${d[1]}, ${d[4]}, ${d[0]}`, desc: 'I → ii → V → I' },
+      { name: 'Tonic Prolongation', chords: `${d[0]}, ${d[0]}, ${d[4]}, ${d[0]}`, desc: 'I → I → V → I' },
+    ];
+  };
+
+  const getInvalidExamples = () => {
+    const d = getScaleDegrees(selectedKey);
+    return [
+      { name: 'Plagal Without Dom', chords: `${d[0]}, ${d[3]}, ${d[0]}`, desc: 'IV → I directly' },
+      { name: 'Retrograde Motion', chords: `${d[0]}, ${d[4]}, ${d[3]}`, desc: 'V → IV prohibited' },
+    ];
+  };
+
+  const handleKeyChange = (newKey: string) => {
+    setSelectedKey(newKey);
+    setInput('');
+    setHasValidated(false);
+    setResult(null);
+    setActiveStates(['q0']);
+    setChordHistory([]);
+    setLiveSuggestions([]);
+  };
 
   const playChord = async (frequencies: number[]) => {
     if (!audioContextRef.current) {
@@ -302,21 +374,37 @@ const Validator = () => {
         <div className="grid lg:grid-cols-2 gap-6 mb-6">
           {/* Input Section */}
           <div className="bg-slate-800/50 backdrop-blur rounded-2xl p-5 border border-purple-500/20">
-            <div className="flex items-center gap-2 mb-4">
-              <Zap className="w-5 h-5 text-yellow-400" />
-              <h2 className="text-lg font-semibold">Enter Chord Progression</h2>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Zap className="w-5 h-5 text-yellow-400" />
+                <h2 className="text-lg font-semibold">Enter Chord Progression</h2>
+              </div>
+              
+              {/* Key Selector */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-400">Key:</span>
+                <select
+                  value={selectedKey}
+                  onChange={(e) => handleKeyChange(e.target.value)}
+                  className="bg-slate-900/50 border border-purple-500/30 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 cursor-pointer"
+                >
+                  {majorKeys.map(k => (
+                    <option key={k.key} value={k.key}>{k.name}</option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="C, Dm, G7, C"
+              placeholder={`Example: ${getScaleDegrees(selectedKey).slice(0, 4).join(', ')}`}
               className="w-full h-28 bg-slate-900/50 border border-purple-500/30 rounded-xl p-4 text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 transition-all font-mono text-lg"
             />
 
             <p className="text-xs text-gray-400 mt-2 flex items-center gap-2">
               <Info className="w-3 h-3" />
-              Separate chords with commas. Examples: C, Dm, G7, C
+              Current key: <strong className="text-purple-400">{majorKeys.find(k => k.key === selectedKey)?.name}</strong>
             </p>
 
             <div className="flex flex-wrap gap-2 mt-4">
@@ -377,9 +465,9 @@ const Validator = () => {
 
             {/* Examples */}
             <div className="mt-4">
-              <h3 className="text-xs font-semibold text-gray-400 mb-2">Quick Examples:</h3>
+              <h3 className="text-xs font-semibold text-gray-400 mb-2">Quick Examples in {selectedKey} Major:</h3>
               <div className="grid grid-cols-2 gap-2">
-                {examples.map((ex, i) => (
+                {getExamples().map((ex, i) => (
                   <button
                     key={i}
                     onClick={() => handleExample(ex.chords)}
@@ -397,22 +485,17 @@ const Validator = () => {
             <div className="mt-3">
               <h3 className="text-xs font-semibold text-red-400 mb-2">❌ Try Invalid Examples:</h3>
               <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => handleExample('C, F, C')}
-                  className="text-left p-2.5 bg-slate-900/50 hover:bg-red-900/20 rounded-lg border border-red-500/20 hover:border-red-500/50 transition-all"
-                >
-                  <div className="text-xs text-red-400 font-semibold">Plagal Without Dom</div>
-                  <div className="text-[10px] text-gray-500">IV → I directly</div>
-                  <div className="text-xs text-gray-400 font-mono mt-1">C, F, C</div>
-                </button>
-                <button
-                  onClick={() => handleExample('C, G, F')}
-                  className="text-left p-2.5 bg-slate-900/50 hover:bg-red-900/20 rounded-lg border border-red-500/20 hover:border-red-500/50 transition-all"
-                >
-                  <div className="text-xs text-red-400 font-semibold">Retrograde Motion</div>
-                  <div className="text-[10px] text-gray-500">V → IV prohibited</div>
-                  <div className="text-xs text-gray-400 font-mono mt-1">C, G, F</div>
-                </button>
+                {getInvalidExamples().map((ex, i) => (
+                  <button
+                    key={i}
+                    onClick={() => handleExample(ex.chords)}
+                    className="text-left p-2.5 bg-slate-900/50 hover:bg-red-900/20 rounded-lg border border-red-500/20 hover:border-red-500/50 transition-all"
+                  >
+                    <div className="text-xs text-red-400 font-semibold">{ex.name}</div>
+                    <div className="text-[10px] text-gray-500">{ex.desc}</div>
+                    <div className="text-xs text-gray-400 font-mono mt-1">{ex.chords}</div>
+                  </button>
+                ))}
               </div>
             </div>
           </div>
