@@ -695,11 +695,11 @@ const ChordValidator = () => {
                 <text x="147" y="170" textAnchor="middle" className="fill-gray-400 text-[10px]">I,vi,iii</text>
 
                 {/* q1 -> q2 (curved up) */}
-                <path d="M 245 155 Q 280 90 330 100" fill="none" stroke="#6b7280" strokeWidth="1.5" markerEnd="url(#arrowhead)" />
+                <path d="M 235 155 Q 270 100 330 90" fill="none" stroke="#6b7280" strokeWidth="1.5" markerEnd="url(#arrowhead)" />
                 <text x="265" y="105" textAnchor="middle" className="fill-gray-400 text-[10px]">IV,ii</text>
 
                 {/* q1 -> q3 (curved down) */}
-                <path d="M 245 205 Q 280 270 330 260" fill="none" stroke="#6b7280" strokeWidth="1.5" markerEnd="url(#arrowhead)" />
+                <path d="M 235 205 Q 280 270 330 270" fill="none" stroke="#6b7280" strokeWidth="1.5" markerEnd="url(#arrowhead)" />
                 <text x="265" y="265" textAnchor="middle" className="fill-gray-400 text-[10px]">V,vii°</text>
 
                 {/* q2 -> q3 */}
@@ -707,29 +707,29 @@ const ChordValidator = () => {
                 <text x="375" y="180" textAnchor="start" className="fill-gray-400 text-[10px]">V,vii°</text>
 
                 {/* q3 -> q1 (curved back) */}
-                <path d="M 328 295 Q 220 350 210 215" fill="none" stroke="#10b981" strokeWidth="2.5" markerEnd="url(#arrowhead)" />
+                <path d="M 328 295 Q 220 350 210 215" fill="none" stroke="#10b981" strokeWidth="1.5" markerEnd="url(#arrowhead)" />
                 <text x="240" y="330" textAnchor="middle" className="fill-emerald-400 text-[10px]">I,vi,iii ✓</text>
 
                 {/* q1 self-loop */}
-                <path d="M 200 148 Q 170 100 240 148" fill="none" stroke="#6b7280" strokeWidth="1.5" markerEnd="url(#arrowhead)" />
-                <text x="220" y="115" textAnchor="middle" className="fill-gray-400 text-[9px]">I,vi,iii</text>
+                <path d="M 200 158 Q 200 90 230 150" fill="none" stroke="#6b7280" strokeWidth="1.5" markerEnd="url(#arrowhead)" />
+                <text x="210" y="115" textAnchor="middle" className="fill-gray-400 text-[9px]">I,vi,iii</text>
 
                 {/* q3 self-loop */}
                 <path d="M 392 270 Q 430 260 392 300" fill="none" stroke="#6b7280" strokeWidth="1.5" markerEnd="url(#arrowhead)" />
-                <text x="435" y="280" textAnchor="start" className="fill-gray-400 text-[9px]">V,vii°</text>
+                <text x="400" y="260" textAnchor="start" className="fill-gray-400 text-[9px]">V,vii°</text>
 
                 {/* Reject paths (dashed) - routed around nodes */}
                 {/* q0 to reject - curves above everything */}
-                <path d="M 95 150 Q 95 30 500 50 Q 530 80 500 150" fill="none" stroke="#ef4444" strokeWidth="1.5" strokeDasharray="4" markerEnd="url(#arrowhead-red)" />
+                <path d="M 90 165 Q 295 -100 510 150" fill="none" stroke="#ef4444" strokeWidth="1.5" strokeDasharray="4" markerEnd="url(#arrowhead-red)" />
                 <text x="300" y="25" textAnchor="middle" className="fill-red-400 text-[9px] font-semibold">IV,ii,V,vii°</text>
                 
                 {/* q2 to reject */}
-                <path d="M 392 80 Q 440 60 500 150" fill="none" stroke="#ef4444" strokeWidth="1.5" strokeDasharray="4" markerEnd="url(#arrowhead-red)" />
-                <text x="450" y="65" textAnchor="middle" className="fill-red-400 text-[9px]">I,vi,iii</text>
+                <path d="M 352 90 Q 400 70 500 150" fill="none" stroke="#ef4444" strokeWidth="1.5" strokeDasharray="4" markerEnd="url(#arrowhead-red)" />
+                <text x="420" y="115" textAnchor="middle" className="fill-red-400 text-[9px]">I,vi,iii</text>
                 
                 {/* q3 to reject */}
-                <path d="M 392 280 Q 440 300 500 210" fill="none" stroke="#ef4444" strokeWidth="1.5" strokeDasharray="4" markerEnd="url(#arrowhead-red)" />
-                <text x="450" y="305" textAnchor="middle" className="fill-red-400 text-[9px]">IV,ii</text>
+                <path d="M 352 280 Q 440 300 500 210" fill="none" stroke="#ef4444" strokeWidth="1.5" strokeDasharray="4" markerEnd="url(#arrowhead-red)" />
+                <text x="470" y="270" textAnchor="middle" className="fill-red-400 text-[9px]">IV,ii</text>
 
                 {/* Draw states */}
                 {Object.entries(states).map(([key, state]) => {
