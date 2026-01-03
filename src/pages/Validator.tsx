@@ -483,7 +483,7 @@ const Validator = () => {
 
             {/* Invalid Examples */}
             <div className="mt-3">
-              <h3 className="text-xs font-semibold text-red-400 mb-2">❌ Try Invalid Examples:</h3>
+              <h3 className="text-xs font-semibold text-red-400 mb-2">❌  Invalid Examples:</h3>
               <div className="grid grid-cols-2 gap-2">
                 {getInvalidExamples().map((ex, i) => (
                   <button
