@@ -28,9 +28,7 @@ const Navigation = () => {
           <a href="#how-it-works" className="text-sm text-muted-foreground hover:text-primary transition-colors duration-300">
             How It Works
           </a>
-          <a href="/contact" className="text-sm text-muted-foreground hover:text-primary transition-colors duration-300">
-            Contact
-          </a>
+          
         </div>
 
         <div className="hidden md:flex items-center space-x-4">
@@ -67,9 +65,6 @@ const Navigation = () => {
             </a>
             <a href="#how-it-works" className="block text-sm text-muted-foreground hover:text-primary transition-colors duration-300">
               How It Works
-            </a>
-            <a href="/contact" className="block text-sm text-muted-foreground hover:text-primary transition-colors duration-300">
-              Contact
             </a>
             
             {/* Mobile Actions */}
