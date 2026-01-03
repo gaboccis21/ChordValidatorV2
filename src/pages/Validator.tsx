@@ -1,17 +1,41 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
-import { Play, Volume2, Info, Zap, CheckCircle, XCircle, Music, Lightbulb, RotateCcw, BookOpen, X, Code, Cpu, GraduationCap, Home } from 'lucide-react';
+import { Play, Volume2, Info, Zap, CheckCircle, XCircle, Music, Lightbulb, RotateCcw, BookOpen, X, Code, Cpu, GraduationCap } from 'lucide-react';
 
-const Validator = () => {
+interface ChordSuggestion {
+  chord: string;
+  function: string;
+}
+
+interface ChordHistoryItem {
+  chord: string;
+  function: string;
+  states: string[];
+}
+
+interface ValidationResult {
+  valid: boolean;
+  message: string;
+  explanation: string;
+  failedAt?: number;
+  chords?: string[];
+  rule?: string;
+  functions?: string[];
+  suggestions?: ChordSuggestion[];
+  incomplete?: boolean;
+}
+
+const ChordValidator = () => {
   const [input, setInput] = useState('');
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<ValidationResult | null>(null);
   const [activeStates, setActiveStates] = useState(['q0']);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [chordHistory, setChordHistory] = useState<any[]>([]);
+  const [chordHistory, setChordHistory] = useState<ChordHistoryItem[]>([]);
   const [showLearnMore, setShowLearnMore] = useState(false);
-  const [liveSuggestions, setLiveSuggestions] = useState<string[]>([]);
+  const [liveSuggestions, setLiveSuggestions] = useState<ChordSuggestion[]>([]);
   const [hasValidated, setHasValidated] = useState(false);
   const [selectedKey, setSelectedKey] = useState('C');
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [currentStep, setCurrentStep] = useState(0);
   const audioContextRef = useRef<AudioContext | null>(null);
 
   // NFA State definitions - Following Functional Harmony Rules
@@ -120,6 +144,7 @@ const Validator = () => {
   const getInvalidExamples = () => {
     const d = getScaleDegrees(selectedKey);
     return [
+      { name: 'Wrong Starting Chord', chords: `${d[4]}, ${d[0]}`, desc: 'Must start with Tonic' },
       { name: 'Plagal Without Dom', chords: `${d[0]}, ${d[3]}, ${d[0]}`, desc: 'IV → I directly' },
       { name: 'Retrograde Motion', chords: `${d[0]}, ${d[4]}, ${d[3]}`, desc: 'V → IV prohibited' },
     ];
@@ -133,11 +158,13 @@ const Validator = () => {
     setActiveStates(['q0']);
     setChordHistory([]);
     setLiveSuggestions([]);
+    setIsAnimating(false);
+    setCurrentStep(0);
   };
 
   const playChord = async (frequencies: number[]) => {
     if (!audioContextRef.current) {
-      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      audioContextRef.current = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
     }
     const ctx = audioContextRef.current;
     const now = ctx.currentTime;
@@ -157,29 +184,104 @@ const Validator = () => {
 
   const playProgression = async (chords: string[]) => {
     setIsPlaying(true);
-    for (let chord of chords) {
-      if (chordFrequencies[chord]) {
-        await playChord(chordFrequencies[chord]);
-        await new Promise(resolve => setTimeout(resolve, 900));
-      }
+    
+    // Initialize audio context immediately if needed
+    if (!audioContextRef.current) {
+      audioContextRef.current = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
     }
+    // Resume audio context if suspended (fixes first play latency)
+    if (audioContextRef.current.state === 'suspended') {
+      await audioContextRef.current.resume();
+    }
+    
+    // Reset to start state
+    setActiveStates(['q0']);
+    setChordHistory([]);
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    let currentStates = ['q0'];
+    const history: ChordHistoryItem[] = [];
+    
+    for (let i = 0; i < chords.length; i++) {
+      const chord = chords[i];
+      const chordFunction = chordToFunction[chord];
+      
+      if (!chordFunction) {
+        setIsPlaying(false);
+        return;
+      }
+      
+      // Calculate next states with rejection logic
+      const nextStates: string[] = [];
+      let shouldReject = false;
+      
+      currentStates.forEach(state => {
+        if (transitions[state] && transitions[state][chordFunction]) {
+          nextStates.push(...transitions[state][chordFunction]);
+        } else if (state === 'q0' && (chordFunction === 'IV' || chordFunction === 'ii' || chordFunction === 'V' || chordFunction === 'vii°')) {
+          shouldReject = true;
+          nextStates.push('q_reject');
+        } else if (state === 'q3' && (chordFunction === 'IV' || chordFunction === 'ii')) {
+          shouldReject = true;
+          nextStates.push('q_reject');
+        } else if (state === 'q2' && (chordFunction === 'I' || chordFunction === 'vi' || chordFunction === 'iii')) {
+          shouldReject = true;
+          nextStates.push('q_reject');
+        } else if (!transitions[state] || !transitions[state][chordFunction]) {
+          shouldReject = true;
+          nextStates.push('q_reject');
+        }
+      });
+      
+      // Update visual state FIRST
+      const uniqueNextStates = [...new Set(nextStates)];
+      setActiveStates(uniqueNextStates);
+      const newHistoryItem: ChordHistoryItem = { chord: chord, function: chordFunction, states: [...uniqueNextStates] };
+      history.push(newHistoryItem);
+      setChordHistory([...history]);
+      
+      // Play the chord sound immediately
+      if (chordFrequencies[chord]) {
+        playChord(chordFrequencies[chord]);
+      }
+      
+      // If rejected, show reject state and stop
+      if (shouldReject || uniqueNextStates.includes('q_reject')) {
+        await new Promise(resolve => setTimeout(resolve, 800));
+        setIsPlaying(false);
+        return;
+      }
+      
+      currentStates = uniqueNextStates;
+      
+      // Wait before next chord
+      await new Promise(resolve => setTimeout(resolve, 800));
+    }
+    
     setIsPlaying(false);
   };
 
-  const validateProgression = (inputStr: string) => {
+  const animateValidation = async (inputStr: string) => {
     const chords = inputStr.split(',').map(c => c.trim()).filter(c => c);
     if (chords.length === 0) {
       setResult(null);
       setActiveStates(['q0']);
       setChordHistory([]);
+      setIsAnimating(false);
       return;
     }
 
     let currentStates = ['q0'];
-    const history: any[] = [];
-    let rejectionReason: any = null;
+    const history: ChordHistoryItem[] = [];
+    let rejectionReason: { rule: string; explanation: string } | null = null;
+
+    // Start with initial state
+    setActiveStates(['q0']);
+    setChordHistory([]);
+    await new Promise(resolve => setTimeout(resolve, 600));
 
     for (let i = 0; i < chords.length; i++) {
+      setCurrentStep(i + 1);
       const chordSymbol = chords[i];
       const chordFunction = chordToFunction[chordSymbol];
 
@@ -187,12 +289,13 @@ const Validator = () => {
         setResult({
           valid: false,
           message: `Unknown chord: "${chordSymbol}"`,
-          explanation: `The chord "${chordSymbol}" is not recognized. Please use supported chord symbols: C, Dm, Em, F, G, G7, Am, Bdim`,
+          explanation: `The chord "${chordSymbol}" is not recognized. Please use supported chord symbols from the selected key.`,
           failedAt: i,
           chords: chords,
         });
         setActiveStates([]);
         setChordHistory(history);
+        setIsAnimating(false);
         return;
       }
 
@@ -200,6 +303,12 @@ const Validator = () => {
       currentStates.forEach(state => {
         if (transitions[state] && transitions[state][chordFunction]) {
           nextStates.push(...transitions[state][chordFunction]);
+        } else if (state === 'q0' && (chordFunction === 'IV' || chordFunction === 'ii' || chordFunction === 'V' || chordFunction === 'vii°')) {
+          rejectionReason = {
+            rule: 'Must Start with Tonic',
+            explanation: `Chord progressions must begin with a Tonic chord (I, vi, or iii). Starting with ${chordSymbol} (${chordFunction}) is not permitted in functional harmony.`,
+          };
+          nextStates.push('q_reject');
         } else if (state === 'q3' && (chordFunction === 'IV' || chordFunction === 'ii')) {
           rejectionReason = {
             rule: 'Retrograde Prohibition',
@@ -220,6 +329,13 @@ const Validator = () => {
           rule: 'Invalid Transition',
           explanation: `The chord "${chordSymbol}" (${chordFunction}) cannot follow the previous chord(s) according to functional harmony rules.`,
         };
+        
+        // Animate to reject state
+        setActiveStates(['q_reject']);
+        const newHistory: ChordHistoryItem[] = [...history, { chord: chordSymbol, function: chordFunction, states: ['q_reject'] }];
+        setChordHistory(newHistory);
+        await new Promise(resolve => setTimeout(resolve, 800));
+        
         setResult({
           valid: false,
           message: `❌ Invalid Progression`,
@@ -228,15 +344,23 @@ const Validator = () => {
           chords: chords,
           rule: reason.rule,
         });
-        setActiveStates(['q_reject']);
-        setChordHistory(history);
+        setIsAnimating(false);
         return;
       }
 
-      history.push({ chord: chordSymbol, function: chordFunction, states: [...nextStates] });
-      currentStates = [...new Set(nextStates)];
+      // Animate transition to next states
+      const uniqueNextStates = [...new Set(nextStates)];
+      setActiveStates(uniqueNextStates);
+      const newHistory: ChordHistoryItem[] = [...history, { chord: chordSymbol, function: chordFunction, states: [...uniqueNextStates] }];
+      setChordHistory(newHistory);
+      history.push({ chord: chordSymbol, function: chordFunction, states: [...uniqueNextStates] });
+      currentStates = uniqueNextStates;
+      
+      // Wait before next transition
+      await new Promise(resolve => setTimeout(resolve, 800));
     }
 
+    // Final validation
     const isValid = currentStates.includes('q1');
     setActiveStates(currentStates);
     setChordHistory(history);
@@ -247,7 +371,7 @@ const Validator = () => {
         message: '✓ Valid Progression - Accepted!',
         explanation: analyzeProgression(history),
         chords: chords,
-        functions: history.map((h: any) => h.function),
+        functions: history.map((h) => h.function),
       });
     } else {
       setResult({
@@ -259,9 +383,11 @@ const Validator = () => {
         incomplete: true,
       });
     }
+    
+    setIsAnimating(false);
   };
 
-  const analyzeProgression = (history: any[]) => {
+  const analyzeProgression = (history: ChordHistoryItem[]) => {
     const functionDescriptions: Record<string, string> = {
       'I': 'Tonic (I) - Establishes key center',
       'vi': 'Tonic function (vi) - Relative minor',
@@ -286,22 +412,44 @@ const Validator = () => {
     return analysis + cadenceType;
   };
 
-  const getCurrentStateName = (states: string[]) => {
+  const getCurrentStateName = (stateList: string[]) => {
     const stateNames: Record<string, string> = { 'q0': 'START', 'q1': 'TONIC', 'q2': 'PREDOMINANT', 'q3': 'DOMINANT', 'q_reject': 'REJECTED' };
-    return states.map(s => stateNames[s]).join(' or ');
+    return stateList.map(s => stateNames[s]).join(' or ');
   };
 
-  const getSuggestions = (currentStates: string[]) => {
-    const suggestions = new Set<string>();
+  const getSuggestions = (currentStates: string[]): ChordSuggestion[] => {
+    const suggestedFunctions = new Set<string>();
     currentStates.forEach(state => {
       if (transitions[state]) {
-        Object.keys(transitions[state]).forEach(chord => suggestions.add(chord));
+        Object.keys(transitions[state]).forEach(func => suggestedFunctions.add(func));
       }
     });
-    return Array.from(suggestions);
+    
+    // Convert functions to actual chord symbols with their function labels
+    const suggestions: ChordSuggestion[] = [];
+    const degrees = getScaleDegrees(selectedKey);
+    const funcToChord: Record<string, string[]> = {
+      'I': [degrees[0]],
+      'vi': [degrees[5]],
+      'iii': [degrees[2]],
+      'IV': [degrees[3]],
+      'ii': [degrees[1]],
+      'V': [degrees[4], `${degrees[4]}7`],
+      'vii°': [degrees[6]],
+    };
+    
+    suggestedFunctions.forEach(func => {
+      if (funcToChord[func]) {
+        funcToChord[func].forEach(chord => {
+          suggestions.push({ chord, function: func });
+        });
+      }
+    });
+    
+    return suggestions;
   };
 
-  const getLiveSuggestions = (inputStr: string) => {
+  const getLiveSuggestions = (inputStr: string): ChordSuggestion[] => {
     const chords = inputStr.split(',').map(c => c.trim()).filter(c => c);
     if (chords.length === 0) return getSuggestions(['q0']);
 
@@ -325,7 +473,9 @@ const Validator = () => {
 
   const handleValidate = () => {
     setHasValidated(true);
-    validateProgression(input);
+    setIsAnimating(true);
+    setCurrentStep(0);
+    animateValidation(input);
   };
 
   useEffect(() => {
@@ -337,6 +487,7 @@ const Validator = () => {
       setActiveStates(['q0']);
       setChordHistory([]);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [input]);
 
   const handleExample = (chords: string) => {
@@ -349,10 +500,7 @@ const Validator = () => {
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
-          <Link to="/" className="flex items-center gap-2 px-4 py-2 bg-slate-800/50 hover:bg-slate-700/50 rounded-lg border border-purple-500/20 transition-colors">
-            <Home className="w-4 h-4" />
-            <span className="text-sm">Exit</span>
-          </Link>
+          <div className="w-20"></div>
           <div className="flex items-center gap-3">
             <Music className="w-8 h-8 text-purple-400" />
             <h1 className="text-2xl md:text-4xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
@@ -410,11 +558,11 @@ const Validator = () => {
             <div className="flex flex-wrap gap-2 mt-4">
               <button
                 onClick={handleValidate}
-                disabled={!input.trim()}
+                disabled={!input.trim() || isAnimating}
                 className="flex items-center gap-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-semibold text-sm"
               >
                 <Zap className="w-4 h-4" />
-                Validate
+                {isAnimating ? 'Validating...' : 'Validate'}
               </button>
               <button
                 onClick={() => {
@@ -424,16 +572,25 @@ const Validator = () => {
                   setActiveStates(['q0']);
                   setChordHistory([]);
                   setLiveSuggestions([]);
+                  setIsAnimating(false);
+                  setCurrentStep(0);
                 }}
-                className="flex items-center gap-2 px-4 py-2.5 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors text-sm"
+                disabled={isAnimating}
+                className="flex items-center gap-2 px-4 py-2.5 bg-slate-700 hover:bg-slate-600 rounded-lg transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <RotateCcw className="w-4 h-4" />
                 Clear
               </button>
-              {result?.valid && result.chords.length > 0 && (
+              {input.trim() && (
                 <button
-                  onClick={() => playProgression(result.chords)}
-                  disabled={isPlaying}
+                  onClick={() => {
+                    if (!hasValidated) {
+                      setHasValidated(true);
+                    }
+                    const chords = input.split(',').map(c => c.trim()).filter(c => c);
+                    playProgression(chords);
+                  }}
+                  disabled={isPlaying || isAnimating}
                   className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-colors disabled:opacity-50 text-sm"
                 >
                   {isPlaying ? <Volume2 className="w-4 h-4 animate-pulse" /> : <Play className="w-4 h-4" />}
@@ -450,13 +607,14 @@ const Validator = () => {
                   Suggested next chords:
                 </h3>
                 <div className="flex flex-wrap gap-2">
-                  {liveSuggestions.map((chord, i) => (
+                  {liveSuggestions.map((suggestion, i) => (
                     <button
                       key={i}
-                      onClick={() => setInput(input + (input.trim().endsWith(',') ? ' ' : ', ') + chord)}
-                      className="px-3 py-1 bg-purple-600/50 hover:bg-purple-600 rounded-full text-xs font-mono transition-colors"
+                      onClick={() => setInput(input + (input.trim().endsWith(',') ? ' ' : ', ') + suggestion.chord)}
+                      className="px-3 py-1.5 bg-purple-600/50 hover:bg-purple-600 rounded-lg text-xs font-mono transition-colors flex items-center gap-1.5"
                     >
-                      {chord}
+                      <span className="font-bold">{suggestion.chord}</span>
+                      <span className="text-purple-300 text-[10px]">({suggestion.function})</span>
                     </button>
                   ))}
                 </div>
@@ -484,7 +642,7 @@ const Validator = () => {
             {/* Invalid Examples */}
             <div className="mt-3">
               <h3 className="text-xs font-semibold text-red-400 mb-2">❌  Invalid Examples:</h3>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 {getInvalidExamples().map((ex, i) => (
                   <button
                     key={i}
@@ -512,6 +670,12 @@ const Validator = () => {
                   </div>
                 </div>
               )}
+              {isAnimating && (
+                <div className="absolute top-4 left-4 bg-purple-600/90 backdrop-blur px-4 py-2 rounded-lg z-20 flex items-center gap-2">
+                  <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse"></div>
+                  <span className="text-sm font-semibold">Processing Step {currentStep}...</span>
+                </div>
+              )}
               <svg viewBox="0 0 580 360" className="w-full h-full">
                 <defs>
                   <marker id="arrowhead" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
@@ -520,40 +684,52 @@ const Validator = () => {
                   <marker id="arrowhead-active" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
                     <polygon points="0 0, 10 4, 0 8" fill="#fbbf24" />
                   </marker>
+                  <marker id="arrowhead-red" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+                    <polygon points="0 0, 10 4, 0 8" fill="#ef4444" />
+                  </marker>
                 </defs>
 
                 {/* Connection lines */}
                 {/* q0 -> q1 */}
-                <line x1="115" y1="180" x2="180" y2="180" stroke="#6b7280" strokeWidth="2" markerEnd="url(#arrowhead)" />
-                <text x="147" y="168" textAnchor="middle" className="fill-gray-400 text-[10px]">I,vi,iii</text>
+                <line x1="115" y1="180" x2="180" y2="180" stroke="#6b7280" strokeWidth="1.5" markerEnd="url(#arrowhead)" />
+                <text x="147" y="170" textAnchor="middle" className="fill-gray-400 text-[10px]">I,vi,iii</text>
 
                 {/* q1 -> q2 (curved up) */}
-                <path d="M 255 155 Q 290 60 325 95" fill="none" stroke="#6b7280" strokeWidth="2" markerEnd="url(#arrowhead)" />
-                <text x="290" y="55" textAnchor="middle" className="fill-gray-400 text-[10px]">IV,ii</text>
+                <path d="M 245 155 Q 280 90 330 100" fill="none" stroke="#6b7280" strokeWidth="1.5" markerEnd="url(#arrowhead)" />
+                <text x="265" y="105" textAnchor="middle" className="fill-gray-400 text-[10px]">IV,ii</text>
 
                 {/* q1 -> q3 (curved down) */}
-                <path d="M 255 205 Q 290 300 325 265" fill="none" stroke="#6b7280" strokeWidth="2" markerEnd="url(#arrowhead)" />
-                <text x="290" y="320" textAnchor="middle" className="fill-gray-400 text-[10px]">V,vii°</text>
+                <path d="M 245 205 Q 280 270 330 260" fill="none" stroke="#6b7280" strokeWidth="1.5" markerEnd="url(#arrowhead)" />
+                <text x="265" y="265" textAnchor="middle" className="fill-gray-400 text-[10px]">V,vii°</text>
 
                 {/* q2 -> q3 */}
-                <line x1="360" y1="115" x2="360" y2="240" stroke="#6b7280" strokeWidth="2" markerEnd="url(#arrowhead)" />
-                <text x="380" y="180" textAnchor="start" className="fill-gray-400 text-[10px]">V,vii°</text>
+                <line x1="360" y1="115" x2="360" y2="245" stroke="#6b7280" strokeWidth="1.5" markerEnd="url(#arrowhead)" />
+                <text x="375" y="180" textAnchor="start" className="fill-gray-400 text-[10px]">V,vii°</text>
 
                 {/* q3 -> q1 (curved back) */}
-                <path d="M 325 295 Q 220 340 220 215" fill="none" stroke="#10b981" strokeWidth="2.5" markerEnd="url(#arrowhead)" />
-                <text x="255" y="335" textAnchor="middle" className="fill-emerald-400 text-[10px]">I,vi,iii ✓</text>
+                <path d="M 328 295 Q 220 350 210 215" fill="none" stroke="#10b981" strokeWidth="2.5" markerEnd="url(#arrowhead)" />
+                <text x="240" y="330" textAnchor="middle" className="fill-emerald-400 text-[10px]">I,vi,iii ✓</text>
 
                 {/* q1 self-loop */}
-                <path d="M 200 145 Q 175 100 240 145" fill="none" stroke="#6b7280" strokeWidth="1.5" markerEnd="url(#arrowhead)" />
-                <text x="205" y="95" textAnchor="middle" className="fill-gray-500 text-[9px]">loop</text>
+                <path d="M 200 148 Q 170 100 240 148" fill="none" stroke="#6b7280" strokeWidth="1.5" markerEnd="url(#arrowhead)" />
+                <text x="220" y="115" textAnchor="middle" className="fill-gray-400 text-[9px]">I,vi,iii</text>
 
                 {/* q3 self-loop */}
-                <path d="M 395 265 Q 430 260 395 300" fill="none" stroke="#6b7280" strokeWidth="1.5" markerEnd="url(#arrowhead)" />
-                <text x="440" y="280" textAnchor="start" className="fill-gray-500 text-[9px]">loop</text>
+                <path d="M 392 270 Q 430 260 392 300" fill="none" stroke="#6b7280" strokeWidth="1.5" markerEnd="url(#arrowhead)" />
+                <text x="435" y="280" textAnchor="start" className="fill-gray-400 text-[9px]">V,vii°</text>
 
-                {/* Reject paths (dashed) */}
-                <line x1="395" y1="80" x2="465" y2="155" stroke="#ef4444" strokeWidth="1.5" strokeDasharray="4" markerEnd="url(#arrowhead)" />
-                <line x1="395" y1="280" x2="465" y2="205" stroke="#ef4444" strokeWidth="1.5" strokeDasharray="4" markerEnd="url(#arrowhead)" />
+                {/* Reject paths (dashed) - routed around nodes */}
+                {/* q0 to reject - curves above everything */}
+                <path d="M 95 150 Q 95 30 500 50 Q 530 80 500 150" fill="none" stroke="#ef4444" strokeWidth="1.5" strokeDasharray="4" markerEnd="url(#arrowhead-red)" />
+                <text x="300" y="25" textAnchor="middle" className="fill-red-400 text-[9px] font-semibold">IV,ii,V,vii°</text>
+                
+                {/* q2 to reject */}
+                <path d="M 392 80 Q 440 60 500 150" fill="none" stroke="#ef4444" strokeWidth="1.5" strokeDasharray="4" markerEnd="url(#arrowhead-red)" />
+                <text x="450" y="65" textAnchor="middle" className="fill-red-400 text-[9px]">I,vi,iii</text>
+                
+                {/* q3 to reject */}
+                <path d="M 392 280 Q 440 300 500 210" fill="none" stroke="#ef4444" strokeWidth="1.5" strokeDasharray="4" markerEnd="url(#arrowhead-red)" />
+                <text x="450" y="305" textAnchor="middle" className="fill-red-400 text-[9px]">IV,ii</text>
 
                 {/* Draw states */}
                 {Object.entries(states).map(([key, state]) => {
@@ -570,19 +746,19 @@ const Validator = () => {
 
                   return (
                     <g key={key}>
-                      {/* Outer ring for accept state */}
+                      {/* Outer ring for accept state - ONLY ONE */}
                       {isAccept && (
                         <circle
                           cx={state.position.x}
                           cy={state.position.y}
-                          r="42"
+                          r="38"
                           fill="none"
-                          stroke={isActive ? "#fbbf24" : "#3b82f6"}
-                          strokeWidth="2"
+                          stroke={isActive ? "#fbbf24" : "#60a5fa"}
+                          strokeWidth="1.5"
                         />
                       )}
-                      {/* Active glow */}
-                      {isActive && (
+                      {/* Active glow - only if NOT accept state OR if active */}
+                      {isActive && !isAccept && (
                         <circle
                           cx={state.position.x}
                           cy={state.position.y}
@@ -627,7 +803,7 @@ const Validator = () => {
                 })}
 
                 {/* Start arrow */}
-                <line x1="20" y1="180" x2="45" y2="180" stroke="#8b5cf6" strokeWidth="2" markerEnd="url(#arrowhead)" />
+                <line x1="20" y1="180" x2="45" y2="180" stroke="#8b5cf6" strokeWidth="1.5" markerEnd="url(#arrowhead)" />
                 <text x="10" y="170" className="fill-purple-400 text-[10px]">start</text>
               </svg>
             </div>
@@ -670,22 +846,23 @@ const Validator = () => {
                 <h3 className={`text-xl font-bold mb-2 ${result.valid ? 'text-emerald-400' : 'text-red-400'}`}>
                   {result.message}
                 </h3>
-                <p className="text-gray-300 text-sm">{result.explanation}</p>
+                <p className="text-gray-300 text-sm whitespace-pre-line">{result.explanation}</p>
 
                 {result.suggestions && result.suggestions.length > 0 && (
                   <div className="mt-4 bg-slate-900/50 rounded-lg p-3 border border-purple-500/20">
                     <h4 className="font-semibold text-purple-400 text-sm mb-2 flex items-center gap-2">
                       <Lightbulb className="w-4 h-4" />
-                      Suggested next chords:
+                      Suggested next chords to complete:
                     </h4>
                     <div className="flex flex-wrap gap-2">
-                      {result.suggestions.map((chord: string, i: number) => (
+                      {result.suggestions.map((suggestion, i) => (
                         <button
                           key={i}
-                          onClick={() => setInput(input + (input.trim() ? ', ' : '') + chord)}
-                          className="px-3 py-1 bg-purple-600 hover:bg-purple-700 rounded-full text-xs font-mono transition-colors"
+                          onClick={() => setInput(input + (input.trim() ? ', ' : '') + suggestion.chord)}
+                          className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 rounded-lg text-xs font-mono transition-colors flex items-center gap-1.5"
                         >
-                          {chord}
+                          <span className="font-bold">{suggestion.chord}</span>
+                          <span className="text-purple-300 text-[10px]">({suggestion.function})</span>
                         </button>
                       ))}
                     </div>
@@ -819,4 +996,4 @@ const Validator = () => {
   );
 };
 
-export default Validator;
+export default ChordValidator;
