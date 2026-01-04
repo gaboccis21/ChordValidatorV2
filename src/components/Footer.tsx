@@ -26,9 +26,6 @@ const Footer = () => {
               <a href="#how-it-works" className="text-sm text-white/70 dark:text-muted-foreground hover:text-primary transition-colors">
                 How It Works
               </a>
-              <a href="/contact" className="text-sm text-white/70 dark:text-muted-foreground hover:text-primary transition-colors">
-                Contact
-              </a>
             </div>
             
             {/* Copyright */}
