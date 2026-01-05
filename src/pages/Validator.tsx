@@ -115,7 +115,7 @@ const Validator = () => {
 
   const chordToFunction = getChordToFunction(selectedKey);
 
-  // NFA Transitions
+  // NFA Transitions - Updated to allow Plagal Cadence
   const transitions: Record<string, Record<string, string[]>> = {
     q0: { 'I': ['q1'], 'vi': ['q1'], 'iii': ['q1'] },
     q1: {
@@ -123,7 +123,10 @@ const Validator = () => {
       'IV': ['q2'], 'ii': ['q2'],
       'V': ['q3'], 'vii°': ['q3'],
     },
-    q2: { 'V': ['q3'], 'vii°': ['q3'] },
+    q2: { 
+      'V': ['q3'], 'vii°': ['q3'],
+      'I': ['q1'], 'vi': ['q1'], 'iii': ['q1'],  // Plagal cadence allowed
+    },
     q3: {
       'V': ['q3'], 'vii°': ['q3'],
       'I': ['q1'], 'vi': ['q1'], 'iii': ['q1'],
@@ -135,9 +138,9 @@ const Validator = () => {
     const d = getScaleDegrees(selectedKey);
     return [
       { name: 'Authentic Cadence', chords: `${d[0]}, ${d[4]}, ${d[0]}`, desc: 'I → V → I' },
+      { name: 'Plagal Cadence', chords: `${d[0]}, ${d[3]}, ${d[0]}`, desc: 'I → IV → I' },
       { name: 'Full Sequence', chords: `${d[0]}, ${d[3]}, ${d[4]}, ${d[0]}`, desc: 'I → IV → V → I' },
       { name: 'With Predominant', chords: `${d[0]}, ${d[1]}, ${d[4]}, ${d[0]}`, desc: 'I → ii → V → I' },
-      { name: 'Tonic Prolongation', chords: `${d[0]}, ${d[0]}, ${d[4]}, ${d[0]}`, desc: 'I → I → V → I' },
     ];
   };
 
@@ -145,7 +148,7 @@ const Validator = () => {
     const d = getScaleDegrees(selectedKey);
     return [
       { name: 'Wrong Starting Chord', chords: `${d[4]}, ${d[0]}`, desc: 'Must start with Tonic' },
-      { name: 'Plagal Without Dom', chords: `${d[0]}, ${d[3]}, ${d[0]}`, desc: 'IV → I directly' },
+      { name: 'Single Chord Only', chords: `${d[0]}`, desc: 'Needs min 2 chords' },
       { name: 'Retrograde Motion', chords: `${d[0]}, ${d[4]}, ${d[3]}`, desc: 'V → IV prohibited' },
     ];
   };
@@ -190,7 +193,14 @@ const Validator = () => {
     if (audioContextRef.current.state === 'suspended') {
       await audioContextRef.current.resume();
     }
-
+    
+    // Check minimum length
+    if (chords.length < 2) {
+      setIsPlaying(false);
+      return;
+    }
+    
+    // Reset to start state
     setActiveStates(['q0']);
     setChordHistory([]);
     await new Promise(resolve => setTimeout(resolve, 300));
@@ -217,9 +227,6 @@ const Validator = () => {
           shouldReject = true;
           nextStates.push('q_reject');
         } else if (state === 'q3' && (chordFunction === 'IV' || chordFunction === 'ii')) {
-          shouldReject = true;
-          nextStates.push('q_reject');
-        } else if (state === 'q2' && (chordFunction === 'I' || chordFunction === 'vi' || chordFunction === 'iii')) {
           shouldReject = true;
           nextStates.push('q_reject');
         } else if (!transitions[state] || !transitions[state][chordFunction]) {
@@ -253,8 +260,24 @@ const Validator = () => {
 
   const animateValidation = async (inputStr: string) => {
     const chords = inputStr.split(',').map(c => c.trim()).filter(c => c);
+    
+    // Minimum 2 chords required
     if (chords.length === 0) {
       setResult(null);
+      setActiveStates(['q0']);
+      setChordHistory([]);
+      setIsAnimating(false);
+      return;
+    }
+    
+    if (chords.length === 1) {
+      setResult({
+        valid: false,
+        message: '⚠ Insufficient Length',
+        explanation: 'A chord progression requires at least 2 chords to demonstrate harmonic movement. Please add more chords.',
+        chords: chords,
+        incomplete: true,
+      });
       setActiveStates(['q0']);
       setChordHistory([]);
       setIsAnimating(false);
@@ -302,12 +325,6 @@ const Validator = () => {
           rejectionReason = {
             rule: 'Retrograde Prohibition',
             explanation: `Cannot move from Dominant (${chords[i-1]}) to Predominant (${chordSymbol}). This creates a "retrograde" motion which weakens the harmonic resolution.`,
-          };
-          nextStates.push('q_reject');
-        } else if (state === 'q2' && (chordFunction === 'I' || chordFunction === 'vi' || chordFunction === 'iii')) {
-          rejectionReason = {
-            rule: 'Predominant Must Resolve Through Dominant',
-            explanation: `Predominant function cannot resolve directly to Tonic. It must first move to Dominant (V or vii°).`,
           };
           nextStates.push('q_reject');
         }
@@ -674,9 +691,9 @@ const Validator = () => {
     </marker>
   </defs>
 
-  {/* Connection lines */}
-  {/* q0 -> q1 */}
-  <line x1="115" y1="180" x2="180" y2="180" stroke="#6b7280" strokeWidth="1.5" markerEnd="url(#arrowhead)" />
+                {/* Connection lines */}
+                {/* q0 -> q1 */}
+                <line x1="115" y1="180" x2="180" y2="180" stroke="#6b7280" strokeWidth="1.5" markerEnd="url(#arrowhead)" />
                 <text x="147" y="170" textAnchor="middle" className="fill-muted-foreground text-[10px]">I,vi,iii</text>
 
                 {/* q1 -> q2 (curved up) */}
@@ -690,6 +707,10 @@ const Validator = () => {
                 {/* q2 -> q3 */}
                 <line x1="360" y1="115" x2="360" y2="245" stroke="#64748b" strokeWidth="1.5" markerEnd="url(#arrowhead)" />
                 <text x="375" y="180" textAnchor="start" className="fill-muted-foreground text-[10px]">V,vii°</text>
+
+                {/* q2 -> q1 (Plagal cadence - curved back) */}
+                <path d="M 328 90 Q 200 10 230 150" fill="none" stroke="#14b8a6" strokeWidth="1.5" markerEnd="url(#arrowhead)" />
+                <text x="260" y="55" textAnchor="middle" className="fill-emerald-400 text-[9px]">I,vi,iii ✓</text>
 
                 {/* q3 -> q1 (curved back) */}
                 <path d="M 328 295 Q 220 350 210 215" fill="none" stroke="#14b8a6" strokeWidth="1.5" markerEnd="url(#arrowhead)" />
@@ -706,8 +727,8 @@ const Validator = () => {
                 {/* Reject paths (dashed) */}
                 <path d="M 90 165 Q 295 -100 510 150" fill="none" stroke="#ef4444" strokeWidth="1.5" strokeDasharray="4" markerEnd="url(#arrowhead-red)" />
                 <text x="300" y="25" textAnchor="middle" className="fill-red-400 text-[9px] font-semibold">IV,ii,V,vii°</text>
-                <path d="M 352 90 Q 400 70 500 150" fill="none" stroke="#ef4444" strokeWidth="1.5" strokeDasharray="4" markerEnd="url(#arrowhead-red)" />
-                <text x="420" y="115" textAnchor="middle" className="fill-red-400 text-[9px]">I,vi,iii</text>
+                
+                {/* q3 to reject */}
                 <path d="M 352 280 Q 440 300 500 210" fill="none" stroke="#ef4444" strokeWidth="1.5" strokeDasharray="4" markerEnd="url(#arrowhead-red)" />
                 <text x="470" y="270" textAnchor="middle" className="fill-red-400 text-[9px]">IV,ii</text>
 
@@ -716,12 +737,12 @@ const Validator = () => {
                   const isActive = activeStates.includes(key);
                   const isAccept = key === 'q1';
                   const colors: Record<string, { fill: string; stroke: string }> = {
-  'q0': { fill: '#8b5cf6', stroke: '#a78bfa' },      // Purple
-  'q1': { fill: '#3b82f6', stroke: '#60a5fa' },      // Blue
-  'q2': { fill: '#22c55e', stroke: '#4ade80' },      // Green
-  'q3': { fill: '#f97316', stroke: '#fb923c' },      // Orange
-  'q_reject': { fill: '#ef4444', stroke: '#f87171' }, // Red
-};
+                    'q0': { fill: '#8b5cf6', stroke: '#a78bfa' },
+                    'q1': { fill: '#22c55e', stroke: '#4ade80' },
+                    'q2': { fill: '#3b82f6', stroke: '#60a5fa' },
+                    'q3': { fill: '#f97316', stroke: '#fb923c' },
+                    'q_reject': { fill: '#ef4444', stroke: '#f87171' },
+                  };
                   const color = colors[key];
 
                   return (
@@ -732,8 +753,8 @@ const Validator = () => {
                           cy={state.position.y}
                           r="38"
                           fill="none"
-                          stroke={isActive ? "#67e8f9" : "#38bdf8"}
-                          strokeWidth="1.5"
+                          stroke={isActive ? "#fbbf24" : "#60a5fa"}
+                          strokeWidth="2"
                         />
                       )}
                       {isActive && !isAccept && (
@@ -766,8 +787,8 @@ const Validator = () => {
                         {state.name}
                       </text>
                       <text
-                        x={state.position.x}
-                        y={state.position.y + 50}
+                        x={state.position.x + 12}
+                        y={state.position.y + 45}
                         textAnchor="middle"
                         className="fill-gray-500 text-[9px]"
                       >
@@ -778,8 +799,8 @@ const Validator = () => {
                 })}
 
                 {/* Start arrow */}
-                <line x1="20" y1="180" x2="45" y2="180" stroke="#38bdf8" strokeWidth="1.5" markerEnd="url(#arrowhead)" />
-                <text x="10" y="170" className="fill-primary text-[10px]">start</text>
+                <line x1="20" y1="180" x2="45" y2="180" stroke="#8b5cf6" strokeWidth="1.5" markerEnd="url(#arrowhead)" />
+                <text x="10" y="170" className="fill-purple-400 text-[10px]">start</text>
               </svg>
             </div>
 
