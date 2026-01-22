@@ -125,7 +125,12 @@ const Validator = () => {
       'IV': ['q2'], 'ii': ['q2'],
       'V': ['q3'], 'vii°': ['q3'],
     },
+    // q2: { 
+    //   'V': ['q3'], 'vii°': ['q3'],
+    //   'I': ['q1'], 'vi': ['q1'], 'iii': ['q1'],
+    // },
     q2: { 
+      'IV': ['q2'], 'ii': ['q2'],          
       'V': ['q3'], 'vii°': ['q3'],
       'I': ['q1'], 'vi': ['q1'], 'iii': ['q1'],
     },
@@ -783,6 +788,10 @@ const Validator = () => {
                 {/* q1 self-loop */}
                 <path d="M 200 158 Q 200 90 230 150" fill="none" stroke="#64748b" strokeWidth="1.5" markerEnd="url(#arrowhead)" />
                 <text x="210" y="115" textAnchor="middle" className="fill-muted-foreground text-[9px]">I,vi,iii</text>
+
+                {/* q2 self-loop */}
+                <path d="M 360 70 Q 450 20 390 75" fill="none" stroke="#64748b" strokeWidth="1.5" markerEnd="url(#arrowhead)"/>
+                <text x="400" y="40" textAnchor="middle" className="fill-muted-foreground text-[9px]">IV,ii</text>
 
                 {/* q3 self-loop */}
                 <path d="M 392 270 Q 430 260 392 300" fill="none" stroke="#64748b" strokeWidth="1.5" markerEnd="url(#arrowhead)" />
