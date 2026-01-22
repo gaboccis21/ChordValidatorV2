@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Play, Volume2, Info, Zap, CheckCircle, XCircle, Music, Lightbulb, RotateCcw, BookOpen, X, Code, Cpu, GraduationCap, Home } from 'lucide-react';
+
 interface ChordSuggestion {
   chord: string;
   function: string;
@@ -24,21 +25,22 @@ interface ValidationResult {
   incomplete?: boolean;
 }
 
+// NFA Chord Validator
 const Validator = () => {
-  const [input, setInput] = useState('');
-  const [result, setResult] = useState<ValidationResult | null>(null);
-  const [activeStates, setActiveStates] = useState(['q0']);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [chordHistory, setChordHistory] = useState<ChordHistoryItem[]>([]);
-  const [showLearnMore, setShowLearnMore] = useState(false);
-  const [liveSuggestions, setLiveSuggestions] = useState<ChordSuggestion[]>([]);
-  const [hasValidated, setHasValidated] = useState(false);
-  const [selectedKey, setSelectedKey] = useState('C');
-  const [isAnimating, setIsAnimating] = useState(false);
-  const [currentStep, setCurrentStep] = useState(0);
-  const audioContextRef = useRef<AudioContext | null>(null);
+  const [input, setInput] = useState(''); // Stores chord input entered by the user
+  const [result, setResult] = useState<ValidationResult | null>(null); // Stores validation result produced by NFA chord validator
+  const [activeStates, setActiveStates] = useState(['q0']); // Tracks currently active state during validation
+  const [isPlaying, setIsPlaying] = useState(false); // Indicates if the audio playback is active 
+  const [chordHistory, setChordHistory] = useState<ChordHistoryItem[]>([]); // Stores the history of inputted chords and their state transitions
+  const [showLearnMore, setShowLearnMore] = useState(false); // Show "Learn More" feature for explanation
+  const [liveSuggestions, setLiveSuggestions] = useState<ChordSuggestion[]>([]); // Stores real-time chord suggestions
+  const [hasValidated, setHasValidated] = useState(false); // Indicates if the user has already validated the chord progression
+  const [selectedKey, setSelectedKey] = useState('C'); // Stores selected key
+  const [isAnimating, setIsAnimating] = useState(false); // Indicates if state transition animations are running
+  const [currentStep, setCurrentStep] = useState(0); // Tracks the current step index during validation
+  const audioContextRef = useRef<AudioContext | null>(null); // Plays audio playback for chord sounds
 
-  // NFA State definitions - Following Functional Harmony Rules
+  // NFA state definitions based on Functional Harmony roles
   const states: Record<string, { name: string; color: string; position: { x: number; y: number } }> = {
   q0: { name: 'START', color: 'bg-purple-500', position: { x: 80, y: 180 } },
   q1: { name: 'TONIC', color: 'bg-blue-500', position: { x: 220, y: 180 } },
@@ -47,7 +49,7 @@ const Validator = () => {
   q_reject: { name: 'REJECT', color: 'bg-red-500', position: { x: 500, y: 180 } },
 };
 
-  // Chord to frequency mapping - expanded for all keys
+  // Chord to frequency mapping for audio playback
   const chordFrequencies: Record<string, number[]> = {
     // C Major
     'C': [261.63, 329.63, 392.00], 'Dm': [293.66, 349.23, 440.00], 'Em': [329.63, 392.00, 493.88],
@@ -88,7 +90,7 @@ const Validator = () => {
     { key: 'Eb', name: 'E♭ Major' },
   ];
 
-  // Get scale degrees for any major key
+  // List of each major key to its corresponding diatonic chords (I - vii°)
   const getScaleDegrees = (key: string): string[] => {
     const scales: Record<string, string[]> = {
       'C': ['C', 'Dm', 'Em', 'F', 'G', 'Am', 'Bdim'],
@@ -107,15 +109,15 @@ const Validator = () => {
   const getChordToFunction = (key: string): Record<string, string> => {
     const degrees = getScaleDegrees(key);
     return {
-      [degrees[0]]: 'I', [degrees[5]]: 'vi', [degrees[2]]: 'iii',
-      [degrees[3]]: 'IV', [degrees[1]]: 'ii',
-      [degrees[4]]: 'V', [`${degrees[4]}7`]: 'V', [degrees[6]]: 'vii°',
+      [degrees[0]]: 'I', [degrees[5]]: 'vi', [degrees[2]]: 'iii', // Tonic
+      [degrees[3]]: 'IV', [degrees[1]]: 'ii',                     // Predominant
+      [degrees[4]]: 'V', [`${degrees[4]}7`]: 'V', [degrees[6]]: 'vii°', // Dominant
     };
   };
 
   const chordToFunction = getChordToFunction(selectedKey);
 
-  // NFA Transitions - Updated to allow Plagal Cadence
+  // NFA state transition rules based on Functional Harmony
   const transitions: Record<string, Record<string, string[]>> = {
     q0: { 'I': ['q1'], 'vi': ['q1'], 'iii': ['q1'] },
     q1: {
@@ -125,7 +127,7 @@ const Validator = () => {
     },
     q2: { 
       'V': ['q3'], 'vii°': ['q3'],
-      'I': ['q1'], 'vi': ['q1'], 'iii': ['q1'],  // Plagal cadence allowed
+      'I': ['q1'], 'vi': ['q1'], 'iii': ['q1'],
     },
     q3: {
       'V': ['q3'], 'vii°': ['q3'],
@@ -133,7 +135,7 @@ const Validator = () => {
     },
   };
 
-  // Dynamic examples based on selected key
+  // Examples of VALID chord progression
   const getExamples = () => {
     const d = getScaleDegrees(selectedKey);
     return [
@@ -144,6 +146,7 @@ const Validator = () => {
     ];
   };
 
+  // Examples of INVALID chord progression
   const getInvalidExamples = () => {
     const d = getScaleDegrees(selectedKey);
     return [
@@ -153,6 +156,7 @@ const Validator = () => {
     ];
   };
 
+  // Reset NFA to match the selected key major (C, G, D,...)
   const handleKeyChange = (newKey: string) => {
     setSelectedKey(newKey);
     setInput('');
@@ -165,6 +169,7 @@ const Validator = () => {
     setCurrentStep(0);
   };
 
+  // Handles audio playback chord sounds
   const playChord = async (frequencies: number[]) => {
     if (!audioContextRef.current) {
       audioContextRef.current = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
@@ -185,7 +190,11 @@ const Validator = () => {
     });
   };
 
+  // LOGIC FOR PLAY BUTTON
+  // Plays each chord with sound and checks if the progression follows the harmony rules.
   const playProgression = async (chords: string[]) => {
+
+    // For audio playback button
     setIsPlaying(true);
     if (!audioContextRef.current) {
       audioContextRef.current = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
@@ -208,10 +217,12 @@ const Validator = () => {
     let currentStates = ['q0'];
     const history: ChordHistoryItem[] = [];
 
+    // Maps chord symbols (C -> I) a
     for (let i = 0; i < chords.length; i++) {
       const chord = chords[i];
       const chordFunction = chordToFunction[chord];
 
+      // Checks if the input is a chord
       if (!chordFunction) {
         setIsPlaying(false);
         return;
@@ -220,6 +231,11 @@ const Validator = () => {
       const nextStates: string[] = [];
       let shouldReject = false;
 
+      /*
+        This simulates NFA state transitions
+        that computes all possible valid chord progression,
+        otherwise goes to rejecting state.
+      */
       currentStates.forEach(state => {
         if (transitions[state] && transitions[state][chordFunction]) {
           nextStates.push(...transitions[state][chordFunction]);
@@ -235,6 +251,7 @@ const Validator = () => {
         }
       });
 
+      // Finalizes the current NFA step: update states, record history, play the chord, and stop if goes to rejecting state.
       const uniqueNextStates = [...new Set(nextStates)];
       setActiveStates(uniqueNextStates);
       const newHistoryItem: ChordHistoryItem = { chord: chord, function: chordFunction, states: [...uniqueNextStates] };
@@ -258,6 +275,8 @@ const Validator = () => {
     setIsPlaying(false);
   };
 
+  // LOGIC FOR VALIDATE BUTTON
+  // Validates the chord progression and displays detailed results.
   const animateValidation = async (inputStr: string) => {
     const chords = inputStr.split(',').map(c => c.trim()).filter(c => c);
     
@@ -270,10 +289,11 @@ const Validator = () => {
       return;
     }
     
+    // Handles single-chord input
     if (chords.length === 1) {
       setResult({
         valid: false,
-        message: '⚠ Insufficient Length',
+        message: 'Insufficient Length',
         explanation: 'A chord progression requires at least 2 chords to demonstrate harmonic movement. Please add more chords.',
         chords: chords,
         incomplete: true,
@@ -284,6 +304,7 @@ const Validator = () => {
       return;
     }
 
+    //Resets the NFA and chord history to prepare for a new chord validation
     let currentStates = ['q0'];
     const history: ChordHistoryItem[] = [];
     let rejectionReason: { rule: string; explanation: string } | null = null;
@@ -292,11 +313,13 @@ const Validator = () => {
     setChordHistory([]);
     await new Promise(resolve => setTimeout(resolve, 600));
 
+    // Iterate through the chord progression one chord at a time
     for (let i = 0; i < chords.length; i++) {
       setCurrentStep(i + 1);
       const chordSymbol = chords[i];
       const chordFunction = chordToFunction[chordSymbol];
 
+      // Reject if the user inputs an unknown chord
       if (!chordFunction) {
         setResult({
           valid: false,
@@ -311,6 +334,11 @@ const Validator = () => {
         return;
       }
 
+      /*
+        This simulates NFA state transitions
+        that computes all possible valid chord progression,
+        otherwise goes to rejecting state.
+      */ 
       const nextStates: string[] = [];
       currentStates.forEach(state => {
         if (transitions[state] && transitions[state][chordFunction]) {
@@ -330,6 +358,7 @@ const Validator = () => {
         }
       });
 
+      // Reject the progression if no valid NFA states remain or a reject state is reached
       if (nextStates.length === 0 || nextStates.includes('q_reject')) {
         const reason = rejectionReason || {
           rule: 'Invalid Transition',
@@ -343,7 +372,7 @@ const Validator = () => {
 
         setResult({
           valid: false,
-          message: `❌ Invalid Progression`,
+          message: `Invalid Progression`,
           explanation: `${reason.rule}: ${reason.explanation}`,
           failedAt: i,
           chords: chords,
@@ -353,6 +382,7 @@ const Validator = () => {
         return;
       }
 
+      // Finalizes the current NFA step: update states, record history, play the chord, and stop if goes to rejecting state.
       const uniqueNextStates = [...new Set(nextStates)];
       setActiveStates(uniqueNextStates);
       const newHistory: ChordHistoryItem[] = [...history, { chord: chordSymbol, function: chordFunction, states: [...uniqueNextStates] }];
@@ -362,14 +392,16 @@ const Validator = () => {
       await new Promise(resolve => setTimeout(resolve, 800));
     }
 
+    // Check if the NFA ends in an accepting (tonic) state
     const isValid = currentStates.includes('q1');
     setActiveStates(currentStates);
     setChordHistory(history);
 
+    // Display test in the result if it is VALID or INCOMPLETE chord progression
     if (isValid) {
       setResult({
         valid: true,
-        message: '✓ Valid Progression - Accepted!',
+        message: 'Valid Progression - Accepted!',
         explanation: analyzeProgression(history),
         chords: chords,
         functions: history.map((h) => h.function),
@@ -377,7 +409,7 @@ const Validator = () => {
     } else {
       setResult({
         valid: false,
-        message: '⚠ Incomplete Progression',
+        message: 'Incomplete Progression',
         explanation: `Your progression follows harmonic rules but doesn't end on Tonic. Current state: ${getCurrentStateName(currentStates)}. Add a Tonic chord to complete.`,
         chords: chords,
         suggestions: getSuggestions(currentStates),
@@ -387,6 +419,8 @@ const Validator = () => {
     setIsAnimating(false);
   };
 
+  // THESE ARE THE TEXTS DISPLAYED IN THE RESULT
+  // Analyzes the chord progression by describing each harmonic function
   const analyzeProgression = (history: ChordHistoryItem[]) => {
     const functionDescriptions: Record<string, string> = {
       'I': 'Tonic (I) - Establishes key center',
@@ -397,6 +431,8 @@ const Validator = () => {
       'V': 'Dominant (V) - Maximum tension',
       'vii°': 'Dominant function (vii°) - Leading tone',
     };
+
+    // Provides textual analysis of the chord progression
     const analysis = history.map((item, i) => {
       const desc = functionDescriptions[item.function] || 'Harmonic function';
       return `${i + 1}. ${item.chord} → ${desc}`;
@@ -405,18 +441,33 @@ const Validator = () => {
     let cadenceType = '';
     if (history.length >= 2) {
       const lastTwo = [history[history.length - 2].function, history[history.length - 1].function];
-      if ((lastTwo[0] === 'V' || lastTwo[0] === 'vii°') && (lastTwo[1] === 'I' || lastTwo[1] === 'vi' || lastTwo[1] === 'iii')) {
-        cadenceType = '\n\n✓ Authentic Cadence: Dominant → Tonic';
+      // if ((lastTwo[0] === 'V' || lastTwo[0] === 'vii°') && (lastTwo[1] === 'I' || lastTwo[1] === 'vi' || lastTwo[1] === 'iii')) {
+      //   cadenceType = '\n\nAuthentic Cadence: Dominant → Tonic';
+      // }
+
+      if (
+        (lastTwo[0] === 'V' || lastTwo[0] === 'vii°') &&
+        (lastTwo[1] === 'I' || lastTwo[1] === 'vi' || lastTwo[1] === 'iii')
+      ) {
+        cadenceType = '\n\nAuthentic Cadence: Dominant → Tonic';
+
+      } else if (
+        lastTwo[0] === 'IV' &&
+        (lastTwo[1] === 'I' || lastTwo[1] === 'vi' || lastTwo[1] === 'iii')
+      ) {
+        cadenceType = '\n\nPlagal Cadence: Predominant → Tonic';
       }
     }
     return analysis + cadenceType;
   };
 
+  // Converts the current NFA states into readable names 
   const getCurrentStateName = (stateList: string[]) => {
     const stateNames: Record<string, string> = { 'q0': 'START', 'q1': 'TONIC', 'q2': 'PREDOMINANT', 'q3': 'DOMINANT', 'q_reject': 'REJECTED' };
     return stateList.map(s => stateNames[s]).join(' or ');
   };
 
+  // Suggests valid next chords by reading allowed transitions from the current NFA states
   const getSuggestions = (currentStates: string[]): ChordSuggestion[] => {
     const suggestedFunctions = new Set<string>();
     currentStates.forEach(state => {
@@ -447,6 +498,7 @@ const Validator = () => {
     return suggestions;
   };
 
+  // Provides real-time chord suggestions by simulating the NFA on the current input and suggesting valid next chords
   const getLiveSuggestions = (inputStr: string): ChordSuggestion[] => {
     const chords = inputStr.split(',').map(c => c.trim()).filter(c => c);
     if (chords.length === 0) return getSuggestions(['q0']);
@@ -455,20 +507,26 @@ const Validator = () => {
     for (let i = 0; i < chords.length; i++) {
       const chordSymbol = chords[i];
       const chordFunction = chordToFunction[chordSymbol];
+
+      // If the chord is unknown, no suggestions are provided
       if (!chordFunction) return [];
 
+      // Compute next possible NFA states for this chord function
       const nextStates: string[] = [];
       currentStates.forEach(state => {
         if (transitions[state] && transitions[state][chordFunction]) {
           nextStates.push(...transitions[state][chordFunction]);
         }
       });
+
+      // If no transitions are possible, the input is invalid so suggestions stop
       if (nextStates.length === 0) return [];
       currentStates = [...new Set(nextStates)];
     }
     return getSuggestions(currentStates);
   };
 
+  // Starts the validation animation and runs the full progression validator
   const handleValidate = () => {
     setHasValidated(true);
     setIsAnimating(true);
@@ -476,9 +534,13 @@ const Validator = () => {
     animateValidation(input);
   };
 
+  // Updates chord validator whenever the user changes input
   useEffect(() => {
+    // Update live suggestions 
     const suggestions = getLiveSuggestions(input);
     setLiveSuggestions(suggestions);
+
+    // If the user edits the input after validating, reset the previous result and NFA state
     if (hasValidated) {
       setHasValidated(false);
       setResult(null);
@@ -488,11 +550,13 @@ const Validator = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [input]);
 
+  // Fills the input box with an example progression and clears previous validation
   const handleExample = (chords: string) => {
     setInput(chords);
     setHasValidated(false);
   };
 
+  // ===== FRONTEND =====
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-500 to-slate-900 text-foreground p-4 md:p-6">
       <div className="max-w-7xl mx-auto">
@@ -643,7 +707,7 @@ const Validator = () => {
 
             {/* Invalid Examples */}
             <div className="mt-3">
-              <h3 className="text-xs font-semibold text-red-400 mb-2">❌  Invalid Examples:</h3>
+              <h3 className="text-xs font-semibold text-red-400 mb-2">Invalid Examples:</h3>
               <div className="grid grid-cols-3 gap-2">
                 {getInvalidExamples().map((ex, i) => (
                   <button
@@ -710,7 +774,7 @@ const Validator = () => {
 
                 {/* q2 -> q1 (Plagal cadence - curved back) */}
                 <path d="M 328 90 Q 200 10 230 150" fill="none" stroke="#14b8a6" strokeWidth="1.5" markerEnd="url(#arrowhead)" />
-                <text x="260" y="55" textAnchor="middle" className="fill-emerald-400 text-[9px]">I,vi,iii ✓</text>
+                <text x="260" y="55" textAnchor="middle" className="fill-teal-400 text-[9px]">I,vi,iii ✓</text>
 
                 {/* q3 -> q1 (curved back) */}
                 <path d="M 328 295 Q 220 350 210 215" fill="none" stroke="#14b8a6" strokeWidth="1.5" markerEnd="url(#arrowhead)" />
